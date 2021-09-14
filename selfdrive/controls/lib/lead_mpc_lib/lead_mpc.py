@@ -4,9 +4,12 @@ import math
 import numpy as np
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 from common.numpy_fast import interp
 >>>>>>> 83b956e71 (acados long)
+=======
+>>>>>>> 265c9e9b8 (SPPEEEEEDDD)
 from common.realtime import sec_since_boot
 from selfdrive.swaglog import cloudlog
 from selfdrive.modeld.constants import T_IDXS
@@ -158,7 +161,7 @@ class LeadMpc():
 
   def reset(self):
     self.x_sol = np.zeros((N+1, 3))
-    self.u_sol = np.zeros((N))
+    self.u_sol = np.zeros((N,1))
     self.set_weights()
     yref = np.zeros((N+1,4))
     self.solver.cost_set_slice(0, N, "yref", yref[:N])
@@ -286,6 +289,7 @@ class LeadMpc():
 
     self.solution_status = self.solver.solve()
 <<<<<<< HEAD
+<<<<<<< HEAD
     self.solver.fill_in_slice(0, N+1, 'x', self.x_sol)
     self.solver.fill_in_slice(0, N, 'u', self.u_sol)
     #self.solver.print_statistics()
@@ -307,14 +311,18 @@ class LeadMpc():
     self.x_sol = self.solver.get_slice(0, N+1, 'x')
     self.u_sol = self.solver.get_slice(0, N, 'u')
     self.cost = self.solver.get_cost()
+=======
+    self.solver.fill_in_slice(0, N+1, 'x', self.x_sol)
+    self.solver.fill_in_slice(0, N, 'u', self.u_sol)
+>>>>>>> 265c9e9b8 (SPPEEEEEDDD)
     #self.solver.print_statistics()
 
-    self.v_solution = interp(T_IDXS[:CONTROL_N], MPC_T, list(self.x_sol[:,1]))
-    self.a_solution = interp(T_IDXS[:CONTROL_N], MPC_T, list(self.x_sol[:,2]))
-    self.j_solution = interp(T_IDXS[:CONTROL_N], MPC_T[:-1], list(self.u_sol[:,0]))
+    self.v_solution = np.interp(T_IDXS[:CONTROL_N], MPC_T, list(self.x_sol[:,1]))
+    self.a_solution = np.interp(T_IDXS[:CONTROL_N], MPC_T, list(self.x_sol[:,2]))
+    self.j_solution = np.interp(T_IDXS[:CONTROL_N], MPC_T[:-1], list(self.u_sol[:,0]))
 
     # Reset if goes through lead car
-    crashing = sum(self.lead_xv[:,0] - self.x_sol[:,0] < 0) > 0
+    crashing = np.sum(self.lead_xv[:,0] - self.x_sol[:,0] < 0) > 0
 
     t = sec_since_boot()
     if (crashing and self.prev_lead_status) or self.solution_status != 0:
