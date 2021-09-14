@@ -3,6 +3,10 @@ import os
 import math
 import numpy as np
 
+<<<<<<< HEAD
+=======
+from common.numpy_fast import interp
+>>>>>>> 83b956e71 (acados long)
 from common.realtime import sec_since_boot
 from selfdrive.swaglog import cloudlog
 from selfdrive.modeld.constants import T_IDXS
@@ -133,6 +137,7 @@ class LeadMpc():
   def __init__(self, lead_id):
     self.lead_id = lead_id
     self.solver = AcadosOcpSolver('lead', N, EXPORT_DIR)
+<<<<<<< HEAD
     self.v_solution = [0.0 for i in range(N)]
     self.a_solution = [0.0 for i in range(N)]
     self.j_solution = [0.0 for i in range(N-1)]
@@ -148,13 +153,38 @@ class LeadMpc():
   def reset(self):
     for i in range(N+1):
       self.solver.set(i, 'x', np.zeros(3))
+=======
+    self.reset()
+
+  def reset(self):
+    self.x_sol = np.zeros((N+1, 3))
+    self.u_sol = np.zeros((N))
+    self.set_weights()
+    yref = np.zeros((N+1,4))
+    self.solver.cost_set_slice(0, N, "yref", yref[:N])
+    self.solver.set(N, "yref", yref[N][:3])
+    for i in range(N+1):
+      self.solver.set(i, 'x', np.zeros(3))
+
+
+    self.v_solution = [0.0 for i in range(N)]
+    self.a_solution = [0.0 for i in range(N)]
+    self.j_solution = [0.0 for i in range(N-1)]
+>>>>>>> 83b956e71 (acados long)
     self.last_cloudlog_t = 0
     self.status = False
     self.new_lead = False
     self.prev_lead_status = False
+<<<<<<< HEAD
     self.crashing = False
     self.prev_lead_x = 10
     self.solution_status = 0
+=======
+    self.prev_lead_x = 10
+    self.solution_status = 0
+    self.solver.solve()
+    self.lead_xv = np.zeros((N+1,2))
+>>>>>>> 83b956e71 (acados long)
     self.x0 = np.zeros(3)
 
   def set_weights(self):
@@ -201,8 +231,15 @@ class LeadMpc():
       self.solver.set(i, 'x', np.array([x_ego, v_ego, a_ego]))
 
   def update(self, carstate, radarstate, v_cruise):
+<<<<<<< HEAD
     self.crashing = False
+=======
+<<<<<<< HEAD
+>>>>>>> a12ee0583 (acados long)
     v_ego = self.x0[1]
+=======
+    v_ego = carstate.vEgo
+>>>>>>> 83b956e71 (acados long)
     if self.lead_id == 0:
       lead = radarstate.leadOne
     else:
@@ -248,6 +285,7 @@ class LeadMpc():
       self.solver.set_param(i, self.lead_xv[i])
 
     self.solution_status = self.solver.solve()
+<<<<<<< HEAD
     self.solver.fill_in_slice(0, N+1, 'x', self.x_sol)
     self.solver.fill_in_slice(0, N, 'u', self.u_sol)
     #self.solver.print_statistics()
@@ -265,6 +303,26 @@ class LeadMpc():
         self.last_cloudlog_t = t
         cloudlog.warning("Lead mpc %d reset, solution_status: %s" % (
                           self.lead_id, self.solution_status))
+=======
+    self.x_sol = self.solver.get_slice(0, N+1, 'x')
+    self.u_sol = self.solver.get_slice(0, N, 'u')
+    self.cost = self.solver.get_cost()
+    #self.solver.print_statistics()
+
+    self.v_solution = interp(T_IDXS[:CONTROL_N], MPC_T, list(self.x_sol[:,1]))
+    self.a_solution = interp(T_IDXS[:CONTROL_N], MPC_T, list(self.x_sol[:,2]))
+    self.j_solution = interp(T_IDXS[:CONTROL_N], MPC_T[:-1], list(self.u_sol[:,0]))
+
+    # Reset if goes through lead car
+    crashing = sum(self.lead_xv[:,0] - self.x_sol[:,0] < 0) > 0
+
+    t = sec_since_boot()
+    if (crashing and self.prev_lead_status) or self.solution_status != 0:
+      if t > self.last_cloudlog_t + 5.0:
+        self.last_cloudlog_t = t
+        cloudlog.warning("Longitudinal mpc %d reset - crashing: %s solution_status: %s" % (
+                          self.lead_id, crashing, self.solution_status))
+>>>>>>> 83b956e71 (acados long)
       self.prev_lead_status = False
       self.reset()
 
