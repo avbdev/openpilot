@@ -111,11 +111,11 @@ def gen_long_mpc_solver():
   lead_1_x_err = x_lead_1 - x_ego - RW(v_ego, v_lead_1) - 4.0
 
   ocp.model.con_h_expr = vertcat(v_ego, a_ego - a_min, a_max - a_ego,
-                                 lead_0_x_err/ (.5 + v_ego/20.),
-                                 lead_1_x_err/ (.5 + v_ego/20.))
+                                 lead_0_x_err/ (.05 + v_ego/20.),
+                                 lead_1_x_err/ (.05 + v_ego/20.))
   ocp.model.con_h_expr_e = vertcat(v_ego, a_ego - a_min, a_max - a_ego,
-                                 lead_0_x_err/ (.5 + v_ego/20.),
-                                 lead_1_x_err/ (.5 + v_ego/20.))
+                                 lead_0_x_err/ (.05 + v_ego/20.),
+                                 lead_1_x_err/ (.05 + v_ego/20.))
 
   # set constraints
   #ocp.constraints.constr_type = 'BGP'
@@ -220,7 +220,7 @@ class LongitudinalMpc():
 
     self.lead_status = lead_0.status or lead_1.status
     if self.lead_status:
-      self.accel_limit_arr[:,0] = -10.0
+      self.accel_limit_arr[:,0] = -3.5
 
     params = np.concatenate([self.accel_limit_arr, lead_0_arr, lead_1_arr], axis=1)
     for i in range(N+1):
