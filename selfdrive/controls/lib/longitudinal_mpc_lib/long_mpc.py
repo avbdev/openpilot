@@ -33,7 +33,7 @@ def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau):
   for i in range(1, N+1):
     dt = T_IDXS[i] - T_IDXS[i-1]
     output[i, 0] = output[i-1, 0] + dt * output[i-1, 1]
-    output[i, 1] = output[i-1, 1] + dt * a_lead
+    output[i, 1] = max(0.0, output[i-1, 1] + dt * a_lead)
     a_lead = a_lead_0 * np.exp(-a_lead_tau * (T_IDXS[i]**2)/2.)
   return output
 
@@ -145,7 +145,7 @@ def gen_long_mpc_solver():
   ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
   ocp.solver_options.integrator_type = 'ERK'
   ocp.solver_options.nlp_solver_type = 'SQP_RTI'
-  ocp.solver_options.qp_solver_iter_max = 10
+  ocp.solver_options.qp_solver_iter_max = 1
 
   # set prediction horizon
   ocp.solver_options.tf = Tf
@@ -169,10 +169,9 @@ class LongitudinalMpc():
     self.solver.cost_set_slice(0, N, "yref", self.yref[:N])
     self.solver.cost_set(N, "yref", self.yref[N][:3])
     self.T_IDXS = np.array(T_IDXS[:N+1])
-    self.min_a = -1.2
-    self.max_a = 1.2
-    self.mins = np.tile(np.array([0.0, 0.0, self.min_a])[None], reps=(N-1,1))
-    self.maxs = np.tile(np.array([0.0, 100.0, self.max_a])[None], reps=(N-1,1))
+    self.accel_limit_arr = np.zeros((N+1, 2))
+    self.accel_limit_arr[:,0] = -1.2
+    self.accel_limit_arr[:,1] = 1.2
     self.x0 = np.zeros(3)
     self.reset()
 
@@ -191,8 +190,6 @@ class LongitudinalMpc():
     self.solver.cost_set(N, 'W', (3/20.)*W[:X_DIM,:X_DIM])
 
   def set_accel_limits(self, min_a, max_a):
-    self.min_a = min_a
-    self.max_a = max_a
     self.accel_limit_arr[:,0] = min_a
     self.accel_limit_arr[:,1] = max_a
 
@@ -229,10 +226,6 @@ class LongitudinalMpc():
     for i in range(N+1):
       self.solver.set_param(i, params[i])
 
-    mins = np.tile(np.array([0.0, 0.0,self.min_a])[None], reps=(N-1,1))
-    maxs = np.tile(np.array([0.0, 100.0,self.max_a])[None], reps=(N-1,1))
-    self.solver.constraints_set_slice(1, N, "lbx", mins, api='old')
-    self.solver.constraints_set_slice(1, N, "ubx", maxs, api='old')
     self.solver.cost_set_slice(0, N, "yref", yref[:N])
     self.solver.cost_set(N, "yref", yref[N][:3])
 
