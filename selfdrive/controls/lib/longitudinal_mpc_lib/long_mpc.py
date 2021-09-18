@@ -18,14 +18,19 @@ EXPORT_DIR = os.path.join(LONG_MPC_DIR, "c_generated_code")
 JSON_FILE = "acados_ocp_long.json"
 
 
-def RW(v_ego, v_l):
+def RW(v_ego, v_l, TR=1.8):
   TR = 1.8
   G = 9.81
   return (v_ego * TR - (v_l - v_ego) * TR + v_ego * v_ego / (2 * G) - v_l * v_l / (2 * G))
 
 
 
-def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau):
+def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, v_ego):
+  MIN_ACCEL = -3.5
+  min_x_lead = ((v_ego + v_lead)/2) * (v_ego - v_lead) / (-MIN_ACCEL * 2)
+  if x_lead < min_x_lead:
+    x_lead = min_x_lead
+
   output = np.zeros((N+1, 2))
   output[0,0] = x_lead
   output[0,1] = v_lead
@@ -110,19 +115,15 @@ def gen_long_mpc_solver():
   lead_0_x_err = x_lead_0 - x_ego - RW(v_ego, v_lead_0) - 4.0
   lead_1_x_err = x_lead_1 - x_ego - RW(v_ego, v_lead_1) - 4.0
 
-  ocp.model.con_h_expr = vertcat(v_ego, a_ego - a_min, a_max - a_ego,
-                                 lead_0_x_err/ (.05 + v_ego/20.),
-                                 lead_1_x_err/ (.05 + v_ego/20.))
-  ocp.model.con_h_expr_e = vertcat(v_ego, a_ego - a_min, a_max - a_ego,
-                                 lead_0_x_err/ (.05 + v_ego/20.),
-                                 lead_1_x_err/ (.05 + v_ego/20.))
 
-  # set constraints
-  #ocp.constraints.constr_type = 'BGP'
-  #ocp.constraints.idxbx = np.array([1,])
-  #ocp.constraints.lbx = np.array([0,])
-  #ocp.constraints.ubx = np.array([100.,])
-  #ocp.constraints.Jsbx = np.eye(2)
+  constraints = vertcat(v_ego,
+                        a_ego - a_min,
+                        a_max - a_ego,
+                        lead_0_x_err/ (.05 + v_ego/20.),
+                        lead_1_x_err/ (.05 + v_ego/20.))
+  ocp.model.con_h_expr = constraints
+  ocp.model.con_h_expr_e = constraints
+
   x0 = np.array([0.0, 0.0, 0.0])
   ocp.constraints.x0 = x0
   ocp.parameter_values = np.array([-1.2, 1.2, 0.0, 0.0, 0.0, 0.0])
@@ -131,14 +132,14 @@ def gen_long_mpc_solver():
   l1_penalty = 0.0
   weights = np.array([1e4, 1e4, 1e4, .1, .1])
   ocp.cost.Zl = l2_penalty * weights
-  ocp.cost.Zu = l2_penalty * weights
   ocp.cost.zl = l1_penalty * weights
-  ocp.cost.zu = l1_penalty * weights
+  ocp.cost.Zu = 0.0 * weights
+  ocp.cost.zu = 0.0 * weights
 
   ocp.constraints.lh = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-  ocp.constraints.uh = np.array([1e16, 1e16, 1e16, 1e16, 1e16])
   ocp.constraints.lh_e = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-  ocp.constraints.uh_e = np.array([1e16, 1e16, 1e16, 1e16, 1e16])
+  ocp.constraints.uh = np.array([1e3, 1e3, 1e3, 1e6, 1e6])
+  ocp.constraints.uh_e = np.array([1e3, 1e3, 1e3, 1e6, 1e6])
   ocp.constraints.idxsh = np.array([0,1,2,3,4])
 
   ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
@@ -173,6 +174,7 @@ class LongitudinalMpc():
     self.accel_limit_arr[:,0] = -1.2
     self.accel_limit_arr[:,1] = 1.2
     self.x0 = np.zeros(3)
+    self.constraint_cost = np.tile(np.array([1e4, 1e4, 1e4, .0, .0]), (N+1,1))
     self.reset()
 
   def reset(self):
@@ -194,7 +196,11 @@ class LongitudinalMpc():
     self.accel_limit_arr[:,1] = max_a
 
   def set_cur_state(self, v, a):
-    self.x0 = np.array([0, v, a])
+    if abs(self.x0[1] - v) > 1.:
+      self.x0 = np.array([0, v, a])
+      self.reset()
+    else:
+      self.x0 = np.array([0, v, a])
     self.solver.constraints_set(0, "lbx", self.x0)
     self.solver.constraints_set(0, "ubx", self.x0)
 
@@ -208,15 +214,15 @@ class LongitudinalMpc():
 
     lead_0 = radarstate.leadOne
     if lead_0.status:
-      lead_0_arr = extrapolate_lead(lead_0.dRel, lead_0.vLead, lead_0.aLeadK, lead_0.aLeadTau)
+      lead_0_arr = extrapolate_lead(lead_0.dRel, lead_0.vLead, lead_0.aLeadK, lead_0.aLeadTau, v_ego)
     else:
-      lead_0_arr = extrapolate_lead(100, v_ego + 10, 0.0, 0.0)
+      lead_0_arr = extrapolate_lead(100, v_ego + 10, 0.0, 0.0, v_ego)
 
     lead_1 = radarstate.leadTwo
     if lead_1.status:
-      lead_1_arr = extrapolate_lead(lead_1.dRel, lead_1.vLead, lead_1.aLeadK, lead_1.aLeadTau)
+      lead_1_arr = extrapolate_lead(lead_1.dRel, lead_1.vLead, lead_1.aLeadK, lead_1.aLeadTau, v_ego)
     else:
-      lead_1_arr = extrapolate_lead(100, v_ego + 10, 0.0, 0.0)
+      lead_1_arr = extrapolate_lead(100, v_ego + 10, 0.0, 0.0, v_ego)
 
     self.lead_status = lead_0.status or lead_1.status
     if self.lead_status:
