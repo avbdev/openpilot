@@ -176,6 +176,9 @@ class LongitudinalMpc():
     self.x0 = np.zeros(3)
     self.constraint_cost = np.tile(np.array([1e4, 1e4, 1e4, .0, .0]), (N+1,1))
     self.reset()
+    self.new_lead = False
+    self.prev_lead_status = False
+    self.prev_lead_x = 0.0
 
   def reset(self):
     self.last_cloudlog_t = 0
@@ -215,8 +218,14 @@ class LongitudinalMpc():
     lead_0 = radarstate.leadOne
     if lead_0.status:
       lead_0_arr = extrapolate_lead(lead_0.dRel, lead_0.vLead, lead_0.aLeadK, lead_0.aLeadTau, v_ego)
+      if not self.prev_lead_status or abs(lead_0.dRel - self.prev_lead_x) > 2.5:
+        self.new_lead = True
+      else:
+        self.new_lead = False
+      self.prev_lead_x = lead_0.dRel
     else:
       lead_0_arr = extrapolate_lead(100, v_ego + 10, 0.0, 0.0, v_ego)
+    self.prev_lead_status = lead_0.status
 
     lead_1 = radarstate.leadTwo
     if lead_1.status:
